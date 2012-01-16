@@ -35,18 +35,16 @@ def parse_tag_input(input):
     delineated by commas and double quotes. Quotes take precedence, so
     they may contain commas.
 
+    NOTE: Original algorithm take space or comma as delimiter. This leads
+    to many problems, so I made little modification -- space is no longer
+    taken as delimiter. Use only commas please.
+
     Returns a sorted list of unique tag names.
     """
     if not input:
         return []
 
     input = force_unicode(input)
-
-    # Special case - if there are no commas or double quotes in the
-    # input, we don't *do* a recall... I mean, we know we only need to
-    # split on spaces.
-    if u',' not in input and u'"' not in input:
-        return replace_synonyms(split_strip(input, u' '))
 
     words = []
     buffer = []
@@ -86,11 +84,9 @@ def parse_tag_input(input):
             if open_quote and u',' in buffer:
                 saw_loose_comma = True
             to_be_split.append(u''.join(buffer))
+
     if to_be_split:
-        if saw_loose_comma:
-            delimiter = u','
-        else:
-            delimiter = u' '
+        delimiter = u','
         for chunk in to_be_split:
             words.extend(split_strip(chunk, delimiter))
     return replace_synonyms(words)
@@ -120,7 +116,7 @@ def edit_string_for_tags(tags):
     it will be space-delimited.
     """
     names = []
-    use_commas = False
+    use_commas = True
     for tag in tags:
         name = getattr(tag, 'name', tag)
         if u',' in name:
@@ -297,23 +293,50 @@ def merge(to_tag, from_tag, ctype = None):
 
     to_obj_ids = [item.object_id for item in to_items]
 
+    deleted_taggeditems = []
+    modified_taggeditems = []
     for item in from_items:
+        if ctype:
+            item_repr = '"%s" (ct=%i, id=%i)' % (item, ctype.id, item.object_id)
+        else:
+            item_repr = '"%s" (ct=%i, id=%i)' % (item, item.content_type.id, item.object_id)
+
         if item.object_id in to_obj_ids:
-            logger.debug('item "%s" already binded to tag "%s"' % (item, to_tag))
+            logger.debug('item %s already binded to tag "%s"' % (item_repr, to_tag))
+            deleted_taggeditems.append({'tag': item.tag_id, 'content_type': item.content_type_id, 'object_id': item.object_id})
             item.delete(update = False)
         else:
+            modified_taggeditems.append({'id': item.id, 'tag': item.tag.name})
             item.tag = to_tag
             item.save()
-            logger.debug('item "%s" merged' % item)
+            logger.debug('item %s merged' % item_repr)
 
         _update_objects_tags(item.object)
 
+    deleted_tags = []
+    created_synonyms = []
     if from_tag.items.count() == 0:
         from_tag.delete()
+        deleted_tags.append(from_tag.name)
         try:
             to_tag.synonyms.create(name = from_tag.name)
+            created_synonyms.append((to_tag.name, from_tag.name))
         except IntegrityError:
             pass
+
+    # reconstruction code to the logger
+    out = ["===============> RECONSTRUCTION COMMANDS:\n"]
+    out.extend(["# just copy-paste it to './manage.py shell_plus' console"])
+    out.extend(["Synonym.objects.get(tag__name='%s'.decode('utf-8'), name='%s'.decode('utf-8')).delete()" % i for i in created_synonyms])
+    out.extend(["tag_lut = {}"])
+    out.extend(["tag_lut['%s'] = Tag.objects.get_or_create(name='%s'.decode('utf-8'))[0].id" % (i, i) for i in deleted_tags])
+    out.extend(["to_update = []"])
+    out.extend(["to_update.append(TaggedItem.objects.create(tag=Tag.objects.get(id=%(tag)i), content_type=ContentType.objects.get(id=%(content_type)i), object_id=%(object_id)i))" % i for i in deleted_taggeditems])
+    out.extend(["TaggedItem.objects.filter(id=%(id)i).update(tag=tag_lut['%(tag)s'])" % i for i in modified_taggeditems])
+    out.extend(['to_update.extend([i.object for i in TaggedItem.objects.filter(id__in=[%s])])' % ','.join([str(i['id']) for i in modified_taggeditems])])
+    out.extend(["from tagging.utils import _update_objects_tags; [_update_objects_tags(i) for i in to_update]"])
+    out.extend(['# reconstruction end of merging tag "%s" to tag "%s"' % (from_tag.name, to_tag.name)])
+    logger.debug("\n".join(out))
 
 
 def _update_objects_tags(object):
@@ -333,4 +356,3 @@ def _update_objects_tags(object):
             setattr(object, field.attname, tags_as_string)
             object.save()
             break
-

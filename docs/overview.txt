@@ -466,9 +466,6 @@ Tag input
 
 Tag input from users is treated as follows:
 
-* If the input doesn't contain any commas or double quotes, it is simply
-  treated as a space-delimited list of tag names.
-
 * If the input does contain either of these characters, we parse the
   input like so:
 
@@ -477,21 +474,20 @@ Tag input from users is treated as follows:
     contain commas). An unclosed double quote will be ignored.
 
   * For the remaining input, if there are any unquoted commas in the
-    input, the remainder will be treated as comma-delimited. Otherwise,
-    it will be treated as space-delimited.
+    input, the remainder will be treated as comma-delimited.
 
 Examples:
 
 ====================== ======================================= ================================================
 Tag input string       Resulting tags                          Notes
 ====================== ======================================= ================================================
-apple ball cat         [``apple``], [``ball``], [``cat``]      No commas, so space delimited
-apple, ball cat        [``apple``], [``ball cat``]             Comma present, so comma delimited
-"apple, ball" cat dog  [``apple, ball``], [``cat``], [``dog``] All commas are quoted, so space delimited
-"apple, ball", cat dog [``apple, ball``], [``cat dog``]        Contains an unquoted comma, so comma delimited
-apple "ball cat" dog   [``apple``], [``ball cat``], [``dog``]  No commas, so space delimited
-"apple" "ball dog      [``apple``], [``ball``], [``dog``]      Unclosed double quote is ignored
+apple ball cat         [``apple ball cat``]                    No commas, single tag on result
+apple, ball cat        [``apple``], [``ball cat``]             Comma present, two tags on result
+"apple, ball", cat dog [``apple, ball``], [``cat dog``]        Comma inside quoted word is not taken as delim
 ====================== ======================================= ================================================
+
+NOTE: Original algorithm take space as delimiter too. In this implementation
+this behaviour was removed, and only delimiter for multiword tags is comma.
 
 
 Tagged items

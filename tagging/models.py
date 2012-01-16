@@ -53,7 +53,7 @@ class TagManager(BaseManager):
                                                object_id=obj.pk,
                                                tag__in=tags_for_removal).delete()
         # Add new tags
-        current_tag_names = [tag.name for tag in current_tags]
+        current_tag_names = [tag.name or tag.name_any for tag in current_tags]
         for tag_name in updated_tag_names:
             if tag_name not in current_tag_names:
                 tag, created = self.get_or_create(name=tag_name)
@@ -173,8 +173,18 @@ class TagManager(BaseManager):
         Passing a value for ``min_count`` implies ``counts=True``.
         """
 
-        extra_joins = ' '.join(queryset.query.get_from_clause()[0][1:])
-        where, params = queryset.query.where.as_sql()
+        if getattr(queryset.query, 'get_compiler', None):
+            # Django 1.2+
+            compiler = queryset.query.get_compiler(using='default')
+            extra_joins = ' '.join(compiler.get_from_clause()[0][1:])
+            where, params = queryset.query.where.as_sql(
+            compiler.quote_name_unless_alias, compiler.connection
+            )
+        else:
+            # Django pre-1.2
+            extra_joins = ' '.join(queryset.query.get_from_clause()[0][1:])
+            where, params = queryset.query.where.as_sql()
+
         if where:
             extra_criteria = 'AND %s' % where
         else:
@@ -625,7 +635,7 @@ class TaggedItem(models.Model):
 
     def _updateLinkedObjects(self, remove_this = False):
         from tagging.fields import TagField
-        object_tags = [ tag.name \
+        object_tags = [tag.name or tag.name_any \
                       for tag in Tag.objects.get_for_object(self.object) \
                               if not remove_this or tag.id != self.tag_id ]
         tags_as_string = ', '.join(object_tags)
@@ -652,4 +662,3 @@ class Synonym(models.Model):
         verbose_name = _("Tag's synonym")
         verbose_name_plural = _("Tags' synonyms")
         ordering = ('name',)
-
