@@ -1,0 +1,29 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+     <a href="../../">{% trans "Home" %}</a> &rsaquo;
+     <a href="../">{{ app_label|capfirst }}</a> &rsaquo;
+     <a href="./">{{ opts.verbose_name_plural|capfirst }}</a> &rsaquo;
+     {% trans 'Join tags as synonyms' %}
+</div>
+{% endblock %}
+
+{% block content %}
+    <p>{% blocktrans %}Please select the new main tag. Other tags will become synonyms for the selecetd tag.{% endblocktrans %}</p>
+    {% for deletable_object in deletable_objects %}
+        <ul>{{ deletable_object|unordered_list }}</ul>
+    {% endfor %}
+    <form action="" method="post">{% csrf_token %}
+    <div>
+    {% for obj in queryset %}
+    <input type="radio" name="tag" value="{{ obj.pk }}" /> {{ obj.name }}<br />
+    <input type="hidden" name="{{ action_checkbox_name }}" value="{{ obj.pk }}" />
+    {% endfor %}
+    <input type="hidden" name="action" value="join_tags" />
+    <input type="hidden" name="post" value="yes" />
+    <input type="submit" value="{% trans "Join tags" %}" />
+    </div>
+    </form>
+{% endblock %}
