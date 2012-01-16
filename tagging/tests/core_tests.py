@@ -8,8 +8,13 @@ from tagging.forms import TagField
 from tagging import settings
 from tagging.models import Tag, TaggedItem
 from tagging.tests.models import Article, Link, Perch, Parrot, FormTest
-from tagging.utils import calculate_cloud, get_tag_list, get_tag, parse_tag_input
-from tagging.utils import LINEAR
+from tagging.utils import (calculate_cloud,
+                           _calculate_thresholds,
+                           _calculate_tag_weight,
+                           get_tag_list,
+                           get_tag,
+                           parse_tag_input)
+from tagging.utils import LINEAR, LOGARITHMIC
 
 class BaseTestCase(TestCase):
     def setUp(self):
@@ -85,6 +90,7 @@ class UtitlitiesTests(BaseTestCase):
         self.assertEqual(None, get_tag('mouse'))
 
     def testTagClouds(self):
+        # TODO: refactor tags.txt reading to a common function
         tags = []
         for line in open(os.path.join(os.path.dirname(__file__), 'tags.txt')).readlines():
             name, count = line.rstrip().split()
@@ -107,6 +113,25 @@ class UtitlitiesTests(BaseTestCase):
         self.assertEqual({1: 97, 2: 12, 3: 7, 4: 2, 5: 4}, sizes)
 
         self.assertRaises(ValueError, calculate_cloud, tags, steps=5, distribution='cheese')
+
+    def testLogarithmicDistributionLimits(self):
+        # TODO: refactor tags.txt reading to a common function
+        tags = []
+        for line in open(os.path.join(os.path.dirname(__file__), 'tags.txt')).readlines():
+            name, count = line.rstrip().split()
+            tag = Tag(name=name)
+            tag.count = int(count)
+            tags.append(tag)
+
+        counts = [tag.count for tag in tags]
+        min_weight = 1.0
+        max_weight = 26.0
+        steps = 5
+        thresholds = _calculate_thresholds(min_weight, max_weight, steps)
+        # Check that the max_weight is equal to the top threshold
+        tag_weight = _calculate_tag_weight(max_weight, max_weight, distribution=LOGARITHMIC)
+        self.assertEqual(tag_weight, thresholds[steps-1])
+
 
 def get_tagcounts(query):
     return [(tag.name, getattr(tag, 'count', False)) for tag in query]
